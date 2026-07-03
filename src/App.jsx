@@ -84,34 +84,47 @@ export default function App() {
     const onResize = () => recomputeLines();
     window.addEventListener('resize', onResize);
     const track = trackRef.current;
-    track?.addEventListener('scroll', onResize);
     const ro = new ResizeObserver(onResize);
     if (track) ro.observe(track);
     return () => {
       window.removeEventListener('resize', onResize);
-      track?.removeEventListener('scroll', onResize);
       ro.disconnect();
     };
   }, [recomputeLines]);
 
   // ---- Desplazamiento automático hacia la ronda activa ----
+  // OJO: el elemento con overflow-x es scrollRef (.track-scroll); trackRef
+  // (.track-inner) es solo el contenido medido, no scrollea por sí mismo.
   const frontier = useMemo(() => frontierRoundIndex(ROUNDS, winners), [winners]);
 
-  useEffect(() => {
+  const scrollToRoundIndex = useCallback((index) => {
+    const scrollEl = scrollRef.current;
     const track = trackRef.current;
-    if (!track) return;
-    const roundEl = track.querySelectorAll('.round-col')[frontier];
+    if (!scrollEl || !track) return;
+    const roundEl = track.querySelectorAll('.round-col')[index];
     if (!roundEl) return;
-    const targetLeft = Math.max(0, roundEl.offsetLeft - 80);
-    track.scrollTo({ left: targetLeft, behavior: 'smooth' });
-  }, [frontier]);
+    const scrollBox = scrollEl.getBoundingClientRect();
+    const roundBox = roundEl.getBoundingClientRect();
+    const delta = roundBox.left - scrollBox.left;
+    const targetLeft = scrollEl.scrollLeft + delta - 24;
+    scrollEl.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+  }, []);
+
+  useEffect(() => {
+    // pequeño delay para no pelear con el gesto táctil que acaba de disparar el cambio
+    const t = setTimeout(() => scrollToRoundIndex(frontier), 120);
+    return () => clearTimeout(t);
+  }, [frontier, scrollToRoundIndex]);
 
   const scrollByRound = (dir) => {
+    const scrollEl = scrollRef.current;
     const track = trackRef.current;
-    if (!track) return;
+    if (!scrollEl || !track) return;
     const col = track.querySelector('.round-col');
-    const step = col ? col.offsetWidth + 56 : 320;
-    track.scrollBy({ left: dir * step, behavior: 'smooth' });
+    const gapStr = getComputedStyle(track).columnGap || getComputedStyle(track).gap || '56';
+    const gap = parseFloat(gapStr) || 56;
+    const step = col ? col.offsetWidth + gap : 320;
+    scrollEl.scrollBy({ left: dir * step, behavior: 'smooth' });
   };
 
   return (

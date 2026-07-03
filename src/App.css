@@ -109,7 +109,13 @@ h1 {
 /* ---- track / node graph ---- */
 .track-scroll {
   overflow-x: auto;
+  overflow-y: hidden;
   scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scroll-snap-type: x proximity;
+  scroll-padding-left: 24px;
   padding-bottom: 12px;
 }
 .track-scroll::-webkit-scrollbar { height: 8px; }
@@ -121,7 +127,7 @@ h1 {
   gap: 64px;
   width: max-content;
   min-width: 100%;
-  padding: 10px 10px 30px;
+  padding: 10px 24px 30px;
 }
 
 .connectors {
@@ -145,6 +151,7 @@ h1 {
   z-index: 1;
   width: 280px;
   flex: 0 0 auto;
+  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   transition: opacity 0.3s ease;
@@ -296,6 +303,7 @@ h1 {
 }
 
 @media (max-width: 720px) {
-  .round-col { width: 240px; }
-  .track-inner { gap: 44px; }
+  .round-col { width: min(78vw, 260px); }
+  .champion-col { width: min(70vw, 220px); }
+  .track-inner { gap: 28px; padding-right: 40vw; }
 }
