@@ -127,32 +127,117 @@ export default function App() {
     scrollEl.scrollBy({ left: dir * step, behavior: 'smooth' });
   };
 
+  // ---- Estado de scroll: para flechas visibles/deshabilitadas y puntos activos ----
+  const [scrollInfo, setScrollInfo] = useState({ canLeft: false, canRight: true });
+  const [activeDot, setActiveDot] = useState(0);
+
+  const updateScrollInfo = useCallback(() => {
+    const scrollEl = scrollRef.current;
+    const track = trackRef.current;
+    if (!scrollEl) return;
+    const maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
+    setScrollInfo({
+      canLeft: scrollEl.scrollLeft > 8,
+      canRight: scrollEl.scrollLeft < maxScroll - 8,
+    });
+    if (track) {
+      const cols = Array.from(track.querySelectorAll('.round-col'));
+      const scrollBox = scrollEl.getBoundingClientRect();
+      let closest = 0;
+      let closestDist = Infinity;
+      cols.forEach((col, i) => {
+        const dist = Math.abs(col.getBoundingClientRect().left - scrollBox.left - 24);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closest = i;
+        }
+      });
+      setActiveDot(closest);
+    }
+  }, []);
+
+  useEffect(() => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    let raf = null;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        updateScrollInfo();
+        raf = null;
+      });
+    };
+    scrollEl.addEventListener('scroll', onScroll, { passive: true });
+    updateScrollInfo();
+    return () => {
+      scrollEl.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [updateScrollInfo]);
+
+  useEffect(() => {
+    updateScrollInfo();
+  }, [lines, updateScrollInfo]);
+
+  // Rueda del mouse: convierte el scroll vertical en horizontal sobre el cuadro
+  const onWheel = useCallback((e) => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      const maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
+      const atLeftEdge = scrollEl.scrollLeft <= 0 && e.deltaY < 0;
+      const atRightEdge = scrollEl.scrollLeft >= maxScroll && e.deltaY > 0;
+      if (!atLeftEdge && !atRightEdge) {
+        e.preventDefault();
+        scrollEl.scrollLeft += e.deltaY;
+      }
+    }
+  }, []);
+
   return (
     <div className="page">
       <header className="page-header">
         <div className="eyebrow">Copa Mundial · 2026</div>
         <h1>Cuadro de eliminación directa</h1>
         <p className="sub">
-          Tocá un equipo para definirlo como ganador. El nodo se conecta en vivo con la
-          siguiente ronda y el cuadro se desplaza hacia el frente del torneo.
+          Tocá un equipo para definirlo como ganador. Usá las flechas, la rueda del mouse
+          o arrastrá para recorrer el cuadro de rondas.
         </p>
         <button className="reset-btn" onClick={resetAll}>
           Reiniciar cuadro
         </button>
       </header>
 
-      <div className="carousel-nav">
-        <button aria-label="Ronda anterior" onClick={() => scrollByRound(-1)}>
-          ‹
-        </button>
-        <span>Deslizá o usá las flechas para recorrer el cuadro</span>
-        <button aria-label="Ronda siguiente" onClick={() => scrollByRound(1)}>
-          ›
-        </button>
+      <div className="round-dots">
+        {ROUNDS.concat([{ key: 'campeon', title: 'Campeón' }]).map((round, i) => (
+          <button
+            key={round.key}
+            className={`dot ${i === activeDot ? 'is-active' : ''}`}
+            onClick={() => scrollToRoundIndex(i)}
+            aria-label={`Ir a ${round.title}`}
+            title={round.title}
+          />
+        ))}
       </div>
 
-      <div className="track-scroll" ref={scrollRef}>
-        <div className="track-inner" ref={trackRef}>
+      <div className="track-wrap">
+        <button
+          className={`nav-arrow nav-arrow-left ${scrollInfo.canLeft ? '' : 'is-hidden'}`}
+          aria-label="Desplazar hacia rondas anteriores"
+          onClick={() => scrollByRound(-1)}
+        >
+          ‹
+        </button>
+        <button
+          className={`nav-arrow nav-arrow-right ${scrollInfo.canRight ? '' : 'is-hidden'}`}
+          aria-label="Desplazar hacia rondas siguientes"
+          onClick={() => scrollByRound(1)}
+        >
+          ›
+        </button>
+
+        <div className="track-scroll" ref={scrollRef} onWheel={onWheel}>
+          <div className="track-inner" ref={trackRef}>
           <svg
             className="connectors"
             width={svgSize.w}
@@ -208,6 +293,7 @@ export default function App() {
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       <footer className="page-footer">Cuadro ilustrativo · elegí ganadores para avanzar</footer>

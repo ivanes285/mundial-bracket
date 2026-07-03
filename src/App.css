@@ -83,28 +83,72 @@ h1 {
 }
 .reset-btn:hover { border-color: var(--gold-soft); color: var(--gold-soft); }
 
-.carousel-nav {
+.round-dots {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  margin: 26px 0 6px;
-  color: var(--chalk-dim);
-  font-size: 12px;
-  letter-spacing: 0.04em;
+  gap: 10px;
+  margin: 26px 0 4px;
 }
-.carousel-nav button {
-  width: 30px;
-  height: 30px;
+.dot {
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   border: 1px solid var(--net-line);
-  background: var(--card-bg);
-  color: var(--gold-soft);
-  font-size: 16px;
+  background: transparent;
+  padding: 0;
   cursor: pointer;
   transition: 0.2s;
 }
-.carousel-nav button:hover { border-color: var(--gold-soft); background: var(--card-bg-hover); }
+.dot:hover { border-color: var(--gold-soft); }
+.dot.is-active {
+  background: var(--gold);
+  border-color: var(--gold);
+  transform: scale(1.25);
+}
+
+.track-wrap {
+  position: relative;
+}
+
+.nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--gold);
+  background: rgba(11, 46, 31, 0.88);
+  backdrop-filter: blur(6px);
+  color: var(--gold-soft);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  transition: opacity 0.2s, transform 0.2s, background 0.2s;
+  opacity: 1;
+}
+.nav-arrow:hover {
+  background: var(--card-bg-hover);
+  transform: translateY(-50%) scale(1.08);
+}
+.nav-arrow.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.nav-arrow-left { left: -6px; }
+.nav-arrow-right { right: -6px; }
+
+@media (max-width: 900px) {
+  .nav-arrow { width: 40px; height: 40px; font-size: 18px; }
+  .nav-arrow-left { left: 2px; }
+  .nav-arrow-right { right: 2px; }
+}
 
 /* ---- track / node graph ---- */
 .track-scroll {
@@ -116,10 +160,17 @@ h1 {
   touch-action: pan-x;
   scroll-snap-type: x proximity;
   scroll-padding-left: 24px;
-  padding-bottom: 12px;
+  padding-bottom: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold) transparent;
 }
-.track-scroll::-webkit-scrollbar { height: 8px; }
-.track-scroll::-webkit-scrollbar-thumb { background: var(--net-line); border-radius: 8px; }
+.track-scroll::-webkit-scrollbar { height: 10px; }
+.track-scroll::-webkit-scrollbar-track { background: rgba(242, 247, 240, 0.05); border-radius: 8px; }
+.track-scroll::-webkit-scrollbar-thumb {
+  background: var(--gold);
+  border-radius: 8px;
+  border: 2px solid var(--grass-deep);
+}
 
 .track-inner {
   position: relative;
