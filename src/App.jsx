@@ -1,0 +1,254 @@
+// src/App.jsx
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { ROUNDS, FINAL } from './data';
+import { initialWinners, teamsFor, clearDownstream, frontierRoundIndex } from './bracketLogic';
+import Flag from './Flag';
+import './App.css';
+
+export default function App() {
+  const [winners, setWinners] = useState(initialWinners);
+
+  const scrollRef = useRef(null);
+  const trackRef = useRef(null);
+  const nodeRefs = useRef({}); // matchId -> element
+  const championRef = useRef(null);
+  const [lines, setLines] = useState([]);
+  const [svgSize, setSvgSize] = useState({ w: 0, h: 0 });
+
+  const champion = winners[FINAL.id] || null;
+
+  const pickWinner = useCallback((matchId, team) => {
+    setWinners((prev) => {
+      if (prev[matchId] && prev[matchId].name === team.name) return prev;
+      const cleared = clearDownstream(matchId, prev);
+      return { ...cleared, [matchId]: team };
+    });
+  }, []);
+
+  const resetAll = () => setWinners(initialWinners());
+
+  const setNodeRef = (id) => (el) => {
+    if (el) nodeRefs.current[id] = el;
+  };
+
+  // ---- Recalcular líneas conectoras ----
+  const recomputeLines = useCallback(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const trackBox = track.getBoundingClientRect();
+    setSvgSize({ w: track.scrollWidth, h: track.scrollHeight });
+
+    const newLines = [];
+
+    for (let i = 0; i < ROUNDS.length - 1; i++) {
+      const nextRound = ROUNDS[i + 1];
+      nextRound.matches.forEach((m) => {
+        if (!m.from) return;
+        m.from.forEach((sourceId) => {
+          const sourceEl = nodeRefs.current[sourceId];
+          const targetEl = nodeRefs.current[m.id];
+          if (!sourceEl || !targetEl) return;
+          const sBox = sourceEl.getBoundingClientRect();
+          const tBox = targetEl.getBoundingClientRect();
+          const x1 = sBox.right - trackBox.left + track.scrollLeft;
+          const y1 = sBox.top + sBox.height / 2 - trackBox.top + track.scrollTop;
+          const x2 = tBox.left - trackBox.left + track.scrollLeft;
+          const y2 = tBox.top + tBox.height / 2 - trackBox.top + track.scrollTop;
+          const active = !!winners[sourceId];
+          newLines.push({ key: `${sourceId}-${m.id}`, x1, y1, x2, y2, active });
+        });
+      });
+    }
+
+    // Final -> Campeón
+    const finalEl = nodeRefs.current[FINAL.id];
+    const champEl = championRef.current;
+    if (finalEl && champEl) {
+      const sBox = finalEl.getBoundingClientRect();
+      const tBox = champEl.getBoundingClientRect();
+      const x1 = sBox.right - trackBox.left + track.scrollLeft;
+      const y1 = sBox.top + sBox.height / 2 - trackBox.top + track.scrollTop;
+      const x2 = tBox.left - trackBox.left + track.scrollLeft;
+      const y2 = tBox.top + tBox.height / 2 - trackBox.top + track.scrollTop;
+      newLines.push({ key: `${FINAL.id}-champion`, x1, y1, x2, y2, active: !!champion });
+    }
+
+    setLines(newLines);
+  }, [winners, champion]);
+
+  useLayoutEffect(() => {
+    recomputeLines();
+  }, [recomputeLines]);
+
+  useEffect(() => {
+    const onResize = () => recomputeLines();
+    window.addEventListener('resize', onResize);
+    const track = trackRef.current;
+    track?.addEventListener('scroll', onResize);
+    const ro = new ResizeObserver(onResize);
+    if (track) ro.observe(track);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      track?.removeEventListener('scroll', onResize);
+      ro.disconnect();
+    };
+  }, [recomputeLines]);
+
+  // ---- Desplazamiento automático hacia la ronda activa ----
+  const frontier = useMemo(() => frontierRoundIndex(ROUNDS, winners), [winners]);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const roundEl = track.querySelectorAll('.round-col')[frontier];
+    if (!roundEl) return;
+    const targetLeft = Math.max(0, roundEl.offsetLeft - 80);
+    track.scrollTo({ left: targetLeft, behavior: 'smooth' });
+  }, [frontier]);
+
+  const scrollByRound = (dir) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const col = track.querySelector('.round-col');
+    const step = col ? col.offsetWidth + 56 : 320;
+    track.scrollBy({ left: dir * step, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="page">
+      <header className="page-header">
+        <div className="eyebrow">Copa Mundial · 2026</div>
+        <h1>Cuadro de eliminación directa</h1>
+        <p className="sub">
+          Tocá un equipo para definirlo como ganador. El nodo se conecta en vivo con la
+          siguiente ronda y el cuadro se desplaza hacia el frente del torneo.
+        </p>
+        <button className="reset-btn" onClick={resetAll}>
+          Reiniciar cuadro
+        </button>
+      </header>
+
+      <div className="carousel-nav">
+        <button aria-label="Ronda anterior" onClick={() => scrollByRound(-1)}>
+          ‹
+        </button>
+        <span>Deslizá o usá las flechas para recorrer el cuadro</span>
+        <button aria-label="Ronda siguiente" onClick={() => scrollByRound(1)}>
+          ›
+        </button>
+      </div>
+
+      <div className="track-scroll" ref={scrollRef}>
+        <div className="track-inner" ref={trackRef}>
+          <svg
+            className="connectors"
+            width={svgSize.w}
+            height={svgSize.h}
+            style={{ width: svgSize.w, height: svgSize.h }}
+          >
+            {lines.map((l) => {
+              const dx = Math.max(28, (l.x2 - l.x1) / 2);
+              const path = `M ${l.x1} ${l.y1} C ${l.x1 + dx} ${l.y1}, ${l.x2 - dx} ${l.y2}, ${l.x2} ${l.y2}`;
+              return (
+                <path
+                  key={l.key}
+                  d={path}
+                  className={l.active ? 'line line-active' : 'line'}
+                  fill="none"
+                />
+              );
+            })}
+          </svg>
+
+          {ROUNDS.map((round, ri) => (
+            <div className={`round-col ${ri === frontier ? 'is-frontier' : ''}`} key={round.key}>
+              <div className="round-title">{round.title}</div>
+              <div className="round-slots">
+                {round.matches.map((m) => (
+                  <MatchNode
+                    key={m.id}
+                    match={m}
+                    teams={teamsFor(m, winners)}
+                    winner={winners[m.id]}
+                    onPick={(team) => pickWinner(m.id, team)}
+                    setRef={setNodeRef(m.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <div className="round-col champion-col">
+            <div className="round-title">Campeón</div>
+            <div className="round-slots" style={{ justifyContent: 'center' }}>
+              <div className="champion-node" ref={championRef}>
+                <span className="cup">🏆</span>
+                {champion ? (
+                  <div className="champion-name">
+                    <Flag code={champion.code} name={champion.name} />
+                    <span>{champion.name}</span>
+                  </div>
+                ) : (
+                  <div className="champion-name empty">Por definir</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <footer className="page-footer">Cuadro ilustrativo · elegí ganadores para avanzar</footer>
+    </div>
+  );
+}
+
+function MatchNode({ match, teams, winner, onPick, setRef }) {
+  const locked = !!match.locked;
+  return (
+    <div className={`node ${locked ? 'node-locked' : ''}`} ref={setRef}>
+      <div className="node-date">
+        <span>{match.date}</span>
+        {match.status && <span className="node-status">{match.status}</span>}
+      </div>
+      {teams.map((team, idx) => (
+        <TeamRow
+          key={idx}
+          team={team}
+          isWinner={winner && team && winner.name === team.name}
+          isLoser={winner && team && winner.name !== team.name}
+          locked={locked}
+          onPick={onPick}
+        />
+      ))}
+      <span className="port port-in" />
+      <span className="port port-out" />
+    </div>
+  );
+}
+
+function TeamRow({ team, isWinner, isLoser, locked, onPick }) {
+  if (!team) {
+    return (
+      <div className="team tbd">
+        <span className="flag-placeholder">🛡️</span>
+        <span className="name">A definir</span>
+      </div>
+    );
+  }
+  const cls = ['team', locked ? 'locked' : '', isWinner ? 'is-winner' : '', isLoser ? 'is-loser' : '']
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <div
+      className={cls}
+      onClick={() => !locked && onPick(team)}
+      role={locked ? undefined : 'button'}
+      tabIndex={locked ? -1 : 0}
+    >
+      <Flag code={team.code} name={team.name} />
+      <span className="name">{team.name}</span>
+      {typeof team.score === 'number' && <span className="score">{team.score}</span>}
+      <span className="check">✓</span>
+    </div>
+  );
+}
